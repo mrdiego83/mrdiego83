@@ -1,0 +1,251 @@
+version: '3.8'
+
+services:
+
+  elasticsearch:
+    build:
+      context: elasticsearch/
+      args:
+        elk_version: ${elk_version}
+    container_name: elasticsearch
+    volumes:
+      - type: bind
+        source: ./elasticsearch/config/elasticsearch.yml
+        target: /usr/share/elasticsearch/config/elasticsearch.yml
+        read_only: true
+      - type: volume
+        source: elasticsearch
+        target: /usr/share/elasticsearch/data
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+    healthcheck:
+      test: ["CMD", "curl --silent --fail localhost:9200/_cluster/health || exit 1"]
+      interval: 30s
+      timeout: 30s
+      retries: 5
+    environment:
+      ES_JAVA_OPTS: "-Xmx1024m -Xms1024m"
+      ELASTIC_PASSWORD: DzxTaAG2MDb1KjZneNFQ
+      discovery.type: single-node
+    networks:
+      - elk
+    
+
+
+  logstash:
+    build:
+      context: logstash/
+      args:
+        elk_version: ${elk_version}
+    container_name: logstash
+    restart: on-failure
+    volumes:
+      - type: bind
+        source: ./logstash/config/logstash.yml
+        target: /usr/share/logstash/config/logstash.yml
+        read_only: true
+      - type: bind
+        source: ./logstash/pipeline
+        target: /usr/share/logstash/pipeline
+        read_only: true
+    ports:
+      - "5044:5044"
+    environment:
+      LS_JAVA_OPTS: "-Xmx1g -Xms1g"
+      ELASTICSEARCH_SERVICEACCOUNT_TOKEN: "AAEAAWVsYXN0aWMva2liYW5hL2tpYmFuYS10b2tlbjo3akQ2MmptZVJNdUxaVzN4R3ZQUXln"
+    networks:
+      - elk
+    depends_on:
+      - elasticsearch
+
+
+  kibana:
+    build:
+      context: kibana/
+      args:
+        elk_version: ${elk_version}
+    container_name: kibana
+    volumes:
+      - type: bind
+        source: ./kibana/config/kibana.yml
+        target: /usr/share/kibana/config/kibana.yml
+        read_only: true
+    ports:
+      - "5601:5601"
+    healthcheck:
+      test: ["CMD", "curl --silent --fail localhost:5601/status || exit 1"]
+      interval: 30s
+      timeout: 30s
+      retries: 5
+    networks:
+      - elk
+    depends_on:
+      - elasticsearch
+
+
+  
+  metricbeat:
+    image: docker.elastic.co/beats/metricbeat:8.15.0
+    container_name: metricbeat
+    restart: always
+    user: root
+    networks:
+      - elk
+    volumes:
+      - /proc:/hostfs/proc:ro
+      - /sys/fs/cgroup:/hostfs/sys/fs/cgroup:ro
+      - /:/hostfs:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./metricbeat:/usr/share/metricbeat/data
+      - ./metricbeat/config/metricbeat.docker.yml:/usr/share/metricbeat/metricbeat.yml
+    command: ["--strict.perms=false", "-system.hostfs=/hostfs"]
+    depends_on:
+      - logstash
+    deploy:
+      mode: global    
+
+  Packetbeat:
+    image: docker.elastic.co/beats/packetbeat:8.15.0
+    container_name: Packetbeat
+    user: root
+    networks:
+      - elk
+    # network_mode: "host"
+    volumes:
+      - ./packetbeat/packetbeat.yml:/usr/share/packetbeat/packetbeat.yml
+      - ./packetbeat:/usr/share/packetbeat/data
+        # - /var/run/docker.sock:/var/run/docker.sock
+    cap_add:
+      - NET_RAW
+      - NET_ADMIN
+    # command: ["--strict.perms=false"]
+    command: -strict.perms=false -e
+    # depends_on:
+    #   - logstash
+
+  filebeat:
+    build:
+      context: filebeat/
+      args:
+        elk_version: ${elk_version}
+    container_name: filebeat
+    user: root
+    command: filebeat -e -strict.perms=false
+    volumes:
+      - type: bind
+        source: ./filebeat/config/filebeat.yml
+        target: /usr/share/filebeat/filebeat.yml
+        read_only: true
+      - type: bind
+        source: /var/lib/docker/containers
+        target: /var/lib/docker/containers
+      - type: bind
+        source: /var/run/docker.sock
+        target: /var/run/docker.sock
+      - type: volume
+        source: filebeat
+        target: /usr/share/filebeat/data
+      - type: bind
+        source: ./bwapp_data/log
+        target: /var/log/apache2/
+      - type: bind
+        source: ./ssh/log
+        target: /var/log/     
+    networks:
+      - elk
+    restart: on-failure
+    depends_on:
+      - logstash
+
+  mysql:
+    image: mysql:5.7
+    container_name: mysql
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: bwapp
+      MYSQL_USER: bwapp
+      MYSQL_PASSWORD: bwapp
+    volumes:
+      - ./mysql_data:/var/lib/mysql
+
+  bwapp:
+    build:
+      context: ./bwapp/bwapp
+      dockerfile: Dockerfile
+    container_name: bwapp
+    ports:
+      - "8080:80"
+    volumes:
+      - ./bwapp_data/log:/var/log/apache2/
+    depends_on:
+      - filebeat
+      - mysql
+    networks:
+      - elk
+  
+  flask-ai:
+    container_name: flask-ai
+    build:
+      context: ./flask_AI
+      dockerfile: Dockerfile
+    ports:
+      - "5000:5000"
+    networks:
+      - elk
+
+  hping3:
+    build: ./hping3
+    container_name: hping3
+    # network_mode: "host"
+    tty: true
+    networks:
+      - elk
+
+  ssh-container:
+    build:
+      context: ./ssh
+      dockerfile: DockerFile
+    container_name: ssh
+    ports:
+      - "2222:22"
+    volumes:
+      - ./ssh/log:/var/log
+    environment:
+      - ROOT_PASSWORD=password
+    stdin_open: true
+    tty: true
+    networks:
+      - elk
+
+  demo_container:
+    build: ./demo_container
+    container_name: demo_container
+    stdin_open: true
+    tty: true
+    networks:
+      - elk
+
+  nginx:
+    image: nginx:latest
+    container_name: nginx
+    ports:
+      - "8050:80"
+    volumes:
+      - ./nginx/html:/usr/share/nginx/html  # Tùy chọn: Mount thư mục html vào container
+    restart: unless-stopped
+
+networks:
+  elk:
+    driver: bridge
+
+volumes:
+  elasticsearch:
+  filebeat:
+  bwapp:
+  mysql_data:
+  bwapp_data:
+  
+
+  
